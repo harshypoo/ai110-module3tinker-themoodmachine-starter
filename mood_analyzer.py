@@ -9,6 +9,7 @@ This class starts with very simple logic:
   - Convert that score into a mood label
 """
 
+import re
 from typing import List, Dict, Tuple, Optional
 
 from dataset import POSITIVE_WORDS, NEGATIVE_WORDS
@@ -53,9 +54,17 @@ class MoodAnalyzer:
           - Normalize repeated characters ("soooo" -> "soo")
         """
         cleaned = text.strip().lower()
-        tokens = cleaned.split()
 
-        return tokens
+        # Keep common text emoticons as separate tokens.
+        cleaned = re.sub(r"(:-\)|:\)|:-\(|:\(|;\)|:d)", r" \1 ", cleaned)
+
+        # Keep word characters and emoji; replace other punctuation with spaces.
+        cleaned = re.sub(r"[^\w\s'😀-🙏😂🥲😭😢😡❤️]", " ", cleaned)
+
+        # Normalize stretched words: "soooo" -> "soo"
+        cleaned = re.sub(r"(.)\1{2,}", r"\1\1", cleaned)
+
+        return cleaned.split()
 
     # ---------------------------------------------------------------------
     # Scoring logic
@@ -83,7 +92,35 @@ class MoodAnalyzer:
         #
         # Hint: if you implement negation, you may want to look at pairs of tokens,
         # like ("not", "happy") or ("never", "fun").
-        pass
+
+        tokens = self.preprocess(text)
+        score = 0
+        negation_words = {"not", "never", "no", "can't", "won't", "don't"}
+        sarcasm_phrases = {
+            "love getting stuck",
+            "love when",
+            "just what i needed",
+        }
+
+        for i, token in enumerate(tokens):
+            if token in self.positive_words:
+                # Check for negation in the previous token
+                if i > 0 and tokens[i - 1] in negation_words:
+                    score -= 1  # Negated positive word counts as negative
+                else:
+                    score += 1
+            elif token in self.negative_words:
+                # Check for negation in the previous token
+                if i > 0 and tokens[i - 1] in negation_words:
+                    score += 1  # Negated negative word counts as positive
+                else:
+                    score -= 1
+
+        cleaned_text = " ".join(tokens)
+        if any(phrase in cleaned_text for phrase in sarcasm_phrases):
+            score -= 2
+
+        return score
 
     # ---------------------------------------------------------------------
     # Label prediction
@@ -110,7 +147,17 @@ class MoodAnalyzer:
         #   2. Return "positive" if the score is above 0.
         #   3. Return "negative" if the score is below 0.
         #   4. Return "neutral" otherwise.
-        pass
+
+        score = self.score_text(text)
+
+        if score > 0:
+            return "positive"
+        elif score < 0:
+            return "negative"
+        elif score == 0:
+            return "neutral"
+        else:
+            return "mixed"
 
     # ---------------------------------------------------------------------
     # Explanations (optional but recommended)
